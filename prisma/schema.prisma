@@ -15,8 +15,22 @@ datasource db {
 
 model user {
   id        Int      @id @default(autoincrement())
-  email     String   @unique
+  email     String?   @unique
   password  String
   role      String   @default("USER") // USER | ADMIN
   created_At DateTime @default(now())
+  profile   profile?
+}
+
+model profile {
+  id      Int    @id @default(autoincrement())
+  userId  Int    @unique @default(autoincrement())
+  user    user   @relation(fields: [userId], references: [id])
+  name    String?
+  phone_number Int?
+  address String?
+  State String?
+  pin_code Int?
+  created_At DateTime @default(now())
+  updated_At DateTime @default(now()) @updatedAt
 }

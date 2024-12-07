@@ -49,14 +49,10 @@ export class AuthService {
         data: createuser,
       };
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      } else {
         throw new HttpException(
-          'Internal Server Error',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
+            error.message || 'Internal server error',
+            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+          );
     }
   }
 
@@ -89,7 +85,7 @@ export class AuthService {
 
       const token = this.jwt.sign(payload, {
         secret: process.env.JWT_SECRET,
-        expiresIn: '10M',
+        expiresIn: '10h',
       });
 
       return {
@@ -101,43 +97,29 @@ export class AuthService {
         },
       };
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-
-      console.error('Error during user login:', error.message || error);
-      throw new HttpException(
-        'Internal Server Error',
-        HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+        throw new HttpException(
+            error.message || 'Internal server error',
+            error.status || HttpStatus.INTERNAL_SERVER_ERROR,
+          );
     }
   }
 
   async updatePassword(
-    token: string,
+    userId: number, // Accept userId directly
     currentPassword: string,
     newPassword: string,
   ) {
     try {
-      // Decode the JWT token
-      const decodedToken = this.jwt.decode(token) as any;
-
-      if (!decodedToken) {
-        throw new HttpException('Invalid token', HttpStatus.UNAUTHORIZED);
-      }
-
-      const { id } = decodedToken; // Extract email from decoded token
-
-      // Find the user by email
+      // Find the user by ID
       const user = await this.prisma.user.findUnique({
-        where: { id },
+        where: { id: userId },
       });
 
       if (!user) {
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
 
-      // Compare current password with the stored password
+      // Compare the current password with the stored password
       const isCurrentPasswordValid = await bcrypt.compare(
         currentPassword,
         user.password,
@@ -153,18 +135,56 @@ export class AuthService {
       // Hash the new password
       const hashedNewPassword = await bcrypt.hash(newPassword, 6);
 
-      // Update the user's password
+      // Update the user's password in the database
       await this.prisma.user.update({
-        where: { id },
+        where: { id: userId },
         data: { password: hashedNewPassword },
       });
 
       return { message: 'Password updated successfully' };
     } catch (error) {
+      console.error('Error in updatePassword service:', error.message);
       throw new HttpException(
         error.message || 'Internal server error',
         error.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
   }
+
+  async deleteDetails(email: string) {
+    try {
+      // Find the user by email
+      const user = await this.prisma.user.findUnique({
+        where: { email },
+      });
+  
+      if (!user) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+  
+      // Delete the associated profile first (if it exists)
+      await this.prisma.profile.deleteMany({
+        where: { userId: user.id }, // Delete profile(s) linked to the user
+      });
+  
+      // Delete the user after deleting the profile
+       await this.prisma.user.delete({
+        where: { email },
+      });
+  
+      return {
+        success: true,
+        message: 'User and associated profile deleted successfully',
+     
+      };
+    } catch (error) {
+      console.error('Error deleting user and profile:', error.message);
+      throw new HttpException(
+        error.message || 'Failed to delete user',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  
 }
